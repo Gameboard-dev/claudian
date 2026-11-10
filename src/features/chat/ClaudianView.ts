@@ -1,5 +1,5 @@
 import type { TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
-import { ItemView, Notice, Scope, setIcon } from 'obsidian';
+import { Component, ItemView, Notice, Scope, setIcon } from 'obsidian';
 
 import { StartupProfiler } from '@/core/performance/StartupProfiler';
 import { getHiddenCommandSet } from '@/core/providers/commands/hiddenCommands';
@@ -60,6 +60,8 @@ export class ClaudianView extends ItemView implements ZenModeSource {
   private readonly sessions: SessionManagerSurface;
   private readonly layout: DualPaneLayout;
   private readonly presentation: ChatPresentationPlacement;
+  /** Holds this pane's text-scale gestures for one open; replaced on reopen, released on close. */
+  private textScaleBinding: Component | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: ChatFeatureHost) {
     super(leaf);
@@ -250,6 +252,7 @@ export class ClaudianView extends ItemView implements ZenModeSource {
     this.viewContainerEl = container;
     this.viewContainerEl.empty();
     this.viewContainerEl.addClass('claudian-container');
+    this.bindTextScale(this.viewContainerEl);
 
     const layoutElements = this.buildViewLayout(this.viewContainerEl);
     if (!this.tabContentEl) return;
@@ -354,6 +357,18 @@ export class ClaudianView extends ItemView implements ZenModeSource {
     await this.tabWorkspace.completeOpen(opening);
   }
 
+  private bindTextScale(el: HTMLElement): void {
+    this.releaseTextScale();
+    this.textScaleBinding = this.addChild(new Component());
+    this.plugin.chatTextScale.bind(this.textScaleBinding, el);
+  }
+
+  private releaseTextScale(): void {
+    if (!this.textScaleBinding) return;
+    this.removeChild(this.textScaleBinding);
+    this.textScaleBinding = null;
+  }
+
   async onClose() {
     const lifecycleRevision = this.tabWorkspace.beginClose();
     // Zen presentation returns synchronously before asynchronous shutdown proceeds.
@@ -363,6 +378,7 @@ export class ClaudianView extends ItemView implements ZenModeSource {
     const scope = this.scope;
     const tabStatePersistence = this.tabWorkspace.currentPersistence;
     tabManager?.beginShutdown();
+    this.releaseTextScale();
     // Supersedes any pending compact transition before shutdown awaits.
     this.layout.dispose();
     this.sessions.dispose();

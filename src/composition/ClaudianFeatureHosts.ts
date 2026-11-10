@@ -25,6 +25,7 @@ import type { ConversationLifecycle } from '@/features/chat/conversation/Convers
 import type { SessionToolBinding } from '@/features/chat/execution/ChatExecutionCoordinator';
 import type { SessionMessagingService } from '@/features/chat/session-messaging/SessionMessagingService';
 import type { SessionRuntimePool } from '@/features/chat/sessions/SessionRuntimePool';
+import type { ChatTextScale } from '@/features/chat/view/ChatTextScale';
 import type { ZenModeSource } from '@/features/chat/zen/types';
 import type { ZenModeController } from '@/features/chat/zen/ZenModeController';
 import type { FeatureHost } from '@/features/FeatureHost';
@@ -50,6 +51,7 @@ export interface ChatFeatureHostDomains extends FeatureHostDomains {
   readonly conversations: ConversationService;
   readonly executionPersistence: ConversationRepository;
   readonly chatModelSelection: ChatModelSelectionCoordinator;
+  readonly chatTextScale: ChatTextScale;
   readonly conversationLifecycle: ConversationLifecycle;
   readonly zenMode: Pick<ZenModeController, 'register'>;
   readonly projects: ProjectService;
@@ -110,6 +112,7 @@ export class ClaudianFeatureHost implements FeatureHost {
 export class ClaudianChatFeatureHost extends ClaudianFeatureHost implements ChatFeatureHost {
   readonly sessionRuntimes: ChatSessionRuntimes;
   readonly chatModelSelection: ChatModelSelectionCoordinator;
+  readonly chatTextScale: ChatTextScale;
   readonly executionPersistence: ConversationRepository;
   readonly conversationLifecycle: ConversationLifecycle;
   readonly projects: ChatProjects;
@@ -118,6 +121,7 @@ export class ClaudianChatFeatureHost extends ClaudianFeatureHost implements Chat
     super(domains);
     this.sessionRuntimes = domains.sessionRuntimes;
     this.chatModelSelection = domains.chatModelSelection;
+    this.chatTextScale = domains.chatTextScale;
     this.executionPersistence = domains.executionPersistence;
     this.conversationLifecycle = domains.conversationLifecycle;
     this.projects = domains.projects;

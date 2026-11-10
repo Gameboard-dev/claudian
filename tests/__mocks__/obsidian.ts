@@ -311,6 +311,18 @@ export class App {
     setActiveLeaf: vi.fn(),
     revealLeaf: vi.fn(),
   });
+  // Obsidian keeps these per vault in window.localStorage; null (or no value) removes the entry.
+  #localStorage = new Map<string, unknown>();
+  loadLocalStorage(key: string): unknown {
+    return this.#localStorage.has(key) ? this.#localStorage.get(key) : null;
+  }
+  saveLocalStorage(key: string, data: unknown): void {
+    if (data === null || data === undefined) {
+      this.#localStorage.delete(key);
+    } else {
+      this.#localStorage.set(key, data);
+    }
+  }
 }
 
 export class MarkdownView {

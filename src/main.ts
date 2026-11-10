@@ -44,6 +44,7 @@ import {
 import { SessionMessagingService } from './features/chat/session-messaging/SessionMessagingService';
 import { createChatSessionRuntime } from './features/chat/sessions/createChatSessionRuntime';
 import { SessionRuntimePool } from './features/chat/sessions/SessionRuntimePool';
+import { CHAT_TEXT_SCALE_STORAGE_KEY, ChatTextScale } from './features/chat/view/ChatTextScale';
 import { createChatFocusCommand } from './features/chat/workspace/ChatFocusCommand';
 import { createChatTabCommands } from './features/chat/workspace/ChatTabCommands';
 import { ChatViewPublisher } from './features/chat/workspace/ChatViewPublisher';
@@ -83,6 +84,11 @@ export default class ClaudianPlugin extends Plugin {
   private readonly agentSkills = new AgentSkillResources(() => this.views.getAllViews());
   private readonly sessionToolEndpoint = new LoopbackSessionToolServer();
   private readonly inlineEditSessions = new InlineEditSessionOwner();
+  /** Per device: kept in Obsidian's vault-scoped local storage, not in the synced settings. */
+  private readonly chatTextScale = new ChatTextScale({
+    load: (): unknown => this.app.loadLocalStorage(CHAT_TEXT_SCALE_STORAGE_KEY) as unknown,
+    save: value => this.app.saveLocalStorage(CHAT_TEXT_SCALE_STORAGE_KEY, value),
+  });
   private readonly zenMode = new ZenModeController({
     app: this.app,
     isEnabled: () => this.settings.enableZenMode,
@@ -160,6 +166,21 @@ export default class ClaudianPlugin extends Plugin {
         revealChat: (leaf, focus) => this.views.activateView(leaf, focus),
       }));
       this.addCommand(this.zenMode.createToggleHistoryCommand());
+      this.addCommand({
+        id: 'increase-chat-text-size',
+        name: 'Increase chat text size',
+        callback: () => this.chatTextScale.step(1),
+      });
+      this.addCommand({
+        id: 'decrease-chat-text-size',
+        name: 'Decrease chat text size',
+        callback: () => this.chatTextScale.step(-1),
+      });
+      this.addCommand({
+        id: 'reset-chat-text-size',
+        name: 'Reset chat text size',
+        callback: () => this.chatTextScale.reset(),
+      });
 
       this.addCommand({
         id: 'copy-startup-diagnostics',
@@ -208,6 +229,7 @@ export default class ClaudianPlugin extends Plugin {
       this.sessionInputCleanupTimer = null;
     }
     this.inlineEditSessions.dispose();
+    this.chatTextScale.dispose();
     StartupProfiler.freeze();
     this.applicationShutdownPromise ??= this.shutdownApplication();
     void this.applicationShutdownPromise.catch(() => undefined);
@@ -324,6 +346,7 @@ export default class ClaudianPlugin extends Plugin {
       conversationLifecycle: this.conversationLifecycle,
       executionPersistence: domains.conversationRepository,
       chatModelSelection: domains.chatModelSelection,
+      chatTextScale: this.chatTextScale,
       zenMode: this.zenMode,
       projects: domains.projects,
     });

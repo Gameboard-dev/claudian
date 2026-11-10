@@ -27,6 +27,7 @@ describe('Chat type scale', () => {
   });
 
   // Session metadata popovers and inline-edit suggestions mount on document.body, outside chat containers.
+  // ChatTextScale sets the per-device multiplier on body as well.
   it('defines the scale on body beside the note font size', () => {
     const style = document.createElement('style');
     style.textContent = readFileSync(path.resolve('src/style/base/variables.css'), 'utf8');
@@ -34,7 +35,7 @@ describe('Chat type scale', () => {
 
     try {
       expect(window.getComputedStyle(document.body).getPropertyValue('--claudian-font-px').trim())
-        .toBe('calc(var(--font-text-size) / 16)');
+        .toBe('calc(var(--font-text-size) / 16 * var(--claudian-text-scale, 1))');
     } finally {
       style.remove();
     }

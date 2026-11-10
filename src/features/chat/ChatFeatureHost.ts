@@ -16,6 +16,7 @@ import type { SessionToolBinding } from '@/features/chat/execution/ChatExecution
 import type { SessionRuntimePool } from '@/features/chat/sessions/SessionRuntimePool';
 import type { ChatTab, TabManagerViewHost } from '@/features/chat/tabs/ChatTab';
 import type { TabIdentity } from '@/features/chat/tabs/TabIdentity';
+import type { ChatTextScale } from '@/features/chat/view/ChatTextScale';
 import type { ZenModeSource } from '@/features/chat/zen/types';
 import type { FeatureHost } from '@/features/FeatureHost';
 
@@ -89,6 +90,8 @@ export interface ChatFeatureHost extends FeatureHost {
   readonly sessionRuntimes: ChatSessionRuntimes;
   bindSessionTools(conversationId: string): SessionToolBinding;
   readonly chatModelSelection: ChatModelSelectionPort;
+  /** Per-device chat text scale; each chat view binds its pane to it. */
+  readonly chatTextScale: Pick<ChatTextScale, 'bind'>;
   createConversation(options?: {
     providerId?: ProviderId;
     sessionId?: string;

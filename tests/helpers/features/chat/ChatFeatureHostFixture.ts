@@ -2,6 +2,7 @@ import { createFeatureHostFixture } from '@test/helpers/FeatureHostFixture';
 
 import type { ClaudianSettings } from '@/core/types';
 import type { ChatFeatureHost } from '@/features/chat/ChatFeatureHost';
+import { ChatTextScale } from '@/features/chat/view/ChatTextScale';
 
 function unconfiguredCapability(): never {
   throw new Error('Supply the ChatFeatureHost capability exercised by this test.');
@@ -28,6 +29,8 @@ Promise<ChatFeatureHost & { settings: ClaudianSettings }> {
     get conversationLifecycle() { return unconfiguredCapability(); },
     get executionPersistence() { return unconfiguredCapability(); },
     get projects() { return unconfiguredCapability(); },
+    // Every chat view binds its pane on open; an unsaved scale at its default leaves the document unchanged.
+    chatTextScale: new ChatTextScale({ load: () => null, save: () => {} }),
     bindSessionTools: unconfiguredCapability,
     createConversation: unconfiguredCapability,
     switchConversation: unconfiguredCapability,

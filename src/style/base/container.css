@@ -5,6 +5,8 @@
   padding: 0;
   overflow: hidden;
   font-family: var(--font-text);
+  /* A pinch over the pane resizes chat text (ChatTextScale) instead of zooming the page in a mobile browser. */
+  touch-action: pan-x pan-y;
 }
 
 /* Compensate for Obsidian's left-only footer without changing other placements. */

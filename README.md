@@ -1,5 +1,9 @@
 # Claudian
 
+> **This is a fork** of [YishenTu/claudian](https://github.com/YishenTu/claudian) (MIT, by Yishen Tu), based on upstream 2.3.41. It installs as **Claudian (fork)**, id `claudian-fork`, so it never collides with the original or its updates; enable only one of the two. Settings and conversations are shared with the original, since both keep them in the vault's `.claudian/` folder.
+>
+> **What the fork adds:** chat text size per device. Ctrl+scroll (Cmd+scroll on macOS, or a trackpad pinch) over the chat pane, or a two-finger pinch in a mobile browser, scales every chat text size, which upstream derives from the note font size, by 0.5× to 3×. The commands *Increase chat text size*, *Decrease chat text size* and *Reset chat text size* do the same and can take hotkeys. The scale is kept in Obsidian's local storage for this vault on this device, not in the synced settings. Code: `src/features/chat/view/ChatTextScale.ts`, the `--claudian-text-scale` property in `src/style/base/variables.css` and `components/messages.css`, and `touch-action` in `base/container.css`.
+
 <p>
   <a href="https://trendshift.io/repositories/21115?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-21115">
     <img align="right" src="https://trendshift.io/api/badge/repositories/21115" alt="Claudian on Trendshift" width="180">
