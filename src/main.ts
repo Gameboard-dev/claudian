@@ -313,6 +313,8 @@ export default class ClaudianPlugin extends Plugin {
       createRuntime: identity => createChatSessionRuntime(this.chatHost, identity),
       releaseHistory: (id, canRelease) => domains.conversationRepository.releaseHistory(id, canRelease),
       readNativeHistoryRevision: id => domains.conversationRepository.readNativeHistoryRevision(id),
+      // A shown conversation follows its native history: a turn added on another device or in the CLI appears.
+      watchNativeHistory: (id, onChange) => domains.conversationRepository.watchNativeHistory(id, onChange),
       // Returning to a recent session skips reloading and parsing its transcript.
       retainedDetachedSessions: 3,
       onChanged: () => this.chatViews.notifyConversationListChanged(),

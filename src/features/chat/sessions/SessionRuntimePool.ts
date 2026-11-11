@@ -65,8 +65,28 @@ interface SessionRecord {
   ownWorkCheck: Promise<void> | null;
   /** Every opener joins the complete check, eviction and provider release. */
   revalidation: Promise<void> | null;
+  /** The watch on the native history of the conversation a presentation shows; null when none is wanted. */
+  follow: NativeHistoryFollow | null;
   unsubscribe(): void;
 }
+
+/**
+ * One watch on a shown conversation's native history. A reported change runs the outside-change check after
+ * changes settle; a change reported while that check runs is checked again once it ends.
+ */
+interface NativeHistoryFollow {
+  readonly conversationId: string;
+  phase: 'watching' | 'stopped';
+  /** The provider's stop for the watch, once it has started. */
+  stop: (() => void) | null;
+  /** A change waits for this timer, or for the running check, before it is checked. */
+  timer: number | null;
+  checking: boolean;
+  changedSinceCheck: boolean;
+}
+
+/** How long reported changes settle before a check: a turn written elsewhere arrives as a burst of writes. */
+export const NATIVE_HISTORY_SETTLE_MS = 300;
 
 /**
  * How long a revision read may take. Sends wait on the check, so a provider that does not answer (a hung
@@ -93,6 +113,11 @@ export class SessionRuntimePool {
     releaseHistory(id: string, canRelease: () => boolean): Promise<boolean>;
     /** The provider's opaque revision of a conversation's native history; null when unknown. */
     readNativeHistoryRevision?(id: string): Promise<string | null>;
+    /**
+     * Watches a conversation's native history, calling `onChange` when it may have changed; resolves to the
+     * watch's stop, or null when the provider cannot watch it. Shown conversations are followed with it.
+     */
+    watchNativeHistory?(id: string, onChange: () => void): Promise<(() => void) | null>;
     /** Recently viewed idle conversation sessions that keep their loaded history; 0 when omitted. */
     retainedDetachedSessions?: number;
     onChanged(): void;
@@ -138,7 +163,59 @@ export class SessionRuntimePool {
     record.attachment = attachment;
     // Read before the presentation hydrates, so a change landing during hydration counts as newer.
     if (record.freshness.state === 'unknown' && !record.revisionRead) this.observeNativeRevision(record);
+    this.syncFollow(record);
     return { acquired: true, attachment };
+  }
+
+  /**
+   * Keeps exactly one watch on the native history of the conversation a presentation shows, and none
+   * otherwise: started on attach or when a shown draft gets its conversation, stopped on detach, removal,
+   * retirement and shutdown.
+   */
+  private syncFollow(record: SessionRecord): void {
+    const id = record.status.conversationId;
+    const canWatch = !!this.deps.watchNativeHistory;
+    const wanted = canWatch && record.attachment && id && !record.retired && this.#isLive(record) ? id : null;
+    const current = record.follow;
+    if (current?.conversationId === wanted) return;
+    if (current) this.stopFollow(current);
+    record.follow = null;
+    if (!wanted || !this.deps.watchNativeHistory) return;
+    const follow: NativeHistoryFollow = {
+      conversationId: wanted, phase: 'watching', stop: null, timer: null, checking: false, changedSinceCheck: false,
+    };
+    record.follow = follow;
+    this.deps.watchNativeHistory(wanted, () => this.nativeHistoryChanged(record, follow)).then(stop => {
+      if (follow.phase === 'stopped') stop?.();
+      else follow.stop = stop;
+    }, error => this.deps.onError(error));
+  }
+
+  private stopFollow(follow: NativeHistoryFollow): void {
+    follow.phase = 'stopped';
+    if (follow.timer !== null) window.clearTimeout(follow.timer);
+    follow.timer = null;
+    follow.stop?.();
+    follow.stop = null;
+  }
+
+  private nativeHistoryChanged(record: SessionRecord, follow: NativeHistoryFollow): void {
+    if (follow.phase === 'stopped') return;
+    follow.changedSinceCheck = true;
+    if (follow.timer !== null || follow.checking) return;
+    follow.timer = window.setTimeout(() => {
+      follow.timer = null;
+      const attachment = record.attachment;
+      if (follow.phase === 'stopped' || record.follow !== follow || !attachment) return;
+      follow.changedSinceCheck = false;
+      follow.checking = true;
+      Promise.resolve(this.revalidate(follow.conversationId, attachment))
+        .catch(error => this.deps.onError(error))
+        .finally(() => {
+          follow.checking = false;
+          if (follow.changedSinceCheck) this.nativeHistoryChanged(record, follow);
+        });
+    }, NATIVE_HISTORY_SETTLE_MS);
   }
 
   /**
@@ -303,7 +380,7 @@ export class SessionRuntimePool {
     const record: SessionRecord = {
       runtime, status: readStatus(runtime),
       attachment: null, eviction: null, retired: false, holds: 0, settledWaiters: [], viewedAt: 0,
-      freshness: { state: 'unknown' }, revisionRead: null, ownWorkCheck: null, revalidation: null,
+      freshness: { state: 'unknown' }, revisionRead: null, ownWorkCheck: null, revalidation: null, follow: null,
       unsubscribe: () => undefined,
     };
     this.records.set(runtime, record);
@@ -344,6 +421,7 @@ export class SessionRuntimePool {
     if (!record || record.attachment !== attachment) return;
     record.runtime.peekModel?.detach();
     record.attachment = null;
+    this.syncFollow(record);
     record.viewedAt = ++this.viewSequence;
     this.changed(record);
   }
@@ -359,6 +437,7 @@ export class SessionRuntimePool {
       if (status.conversationId) this.conversations.set(status.conversationId, record);
     }
     record.status = status;
+    if (promoted || record.retired) this.syncFollow(record);
     // Streaming, usage and presentation changes leave session lists untouched.
     if (promoted || status.isWorking !== previous.isWorking || status.attention !== previous.attention) this.deps.onChanged();
     // Only main work reconciles the cached main transcript and provider context.
@@ -453,6 +532,8 @@ export class SessionRuntimePool {
 
   private remove(record: SessionRecord): void {
     this.settleWaiters(record, false);
+    if (record.follow) this.stopFollow(record.follow);
+    record.follow = null;
     record.unsubscribe();
     this.records.delete(record.runtime);
     this.keys.delete(record.runtime.sessionKey);
@@ -502,6 +583,7 @@ export class SessionRuntimePool {
     this.closing = true;
     for (const record of this.records.values()) {
       this.settleWaiters(record, false);
+      this.syncFollow(record);
       record.runtime.beginShutdown();
     }
   }

@@ -281,6 +281,47 @@ it('compares a quick reopen against the first baseline read still in flight', as
   await destroyTab(second);
 });
 
+// The conversation stays open while the CLI, or Claudian on another device, adds to it: the shown history follows.
+function nativeHistoryWatch() {
+  const watch = { notify: null as (() => void) | null, started: [] as string[], stopped: 0 };
+  const watchNativeHistory = async (id: string, onChange: () => void) => {
+    watch.started.push(id);
+    watch.notify = onChange;
+    return () => { watch.stopped++; watch.notify = null; };
+  };
+  return { watch, watchNativeHistory };
+}
+
+it('shows a change made outside Claudian while the conversation stays open, and stops watching once it closes', async () => {
+  const { watch, watchNativeHistory } = nativeHistoryWatch();
+  const s = await setupRevisionedSession({ watchNativeHistory });
+  await vi.waitFor(() => expect(watch.started).toEqual(['conversation']));
+  expect(s.first.dom.messagesEl.textContent).not.toContain('Reply from the CLI');
+
+  s.continueElsewhere();
+  watch.notify?.();
+  await vi.waitFor(() => expect(s.first.dom.messagesEl.textContent).toContain('Reply from the CLI'));
+  // The session answers the next send from the changed history, not from its old provider context.
+  expect(s.provider.disposeCalls).toBe(1);
+
+  await destroyTab(s.first);
+  expect([watch.stopped, watch.notify]).toEqual([1, null]);
+});
+
+it('reloads nothing when a reported change leaves the native revision as it was', async () => {
+  const { watch, watchNativeHistory } = nativeHistoryWatch();
+  const s = await setupRevisionedSession({ watchNativeHistory });
+  await vi.waitFor(() => expect(watch.notify).not.toBeNull());
+  const readsBefore = s.reads.length;
+  watch.notify?.();
+  // The check ran (it read the revision again) and found nothing to reload.
+  await vi.waitFor(() => expect(s.reads.length).toBeGreaterThan(readsBefore));
+  await new Promise<void>(resolve => setTimeout(resolve, 50));
+  expect(s.runtime.peekModel === s.model).toBe(true);
+  expect(s.provider.disposeCalls).toBe(0);
+  await destroyTab(s.first);
+});
+
 it('refuses a send through a provider session that cannot release yet and replaces it once it can', async () => {
   const s = await setupRevisionedSession();
   // A background shell task from the earlier turn keeps the provider process from releasing.

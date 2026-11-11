@@ -1,6 +1,6 @@
 import { copyProviderHistoryState } from '@/core/providers/providerHistory';
 import { mapWithConcurrency } from '@/utils/concurrency';
-import { readFileRevision } from '@/utils/fileRevision';
+import { readFileRevision, watchFileChanges } from '@/utils/fileRevision';
 
 import { encodeProviderModelSelectionId } from '../../../core/providers/modelSelection';
 import type {
@@ -915,13 +915,32 @@ export class ClaudeConversationHistoryService implements ProviderConversationHis
     vaultPath: string | null,
     pathContext?: ClaudeConfigDirContext,
   ): Promise<string | null> {
+    const sessionPath = await this.#liveSessionPath(input, vaultPath, pathContext);
+    return sessionPath ? await readFileRevision(sessionPath) : null;
+  }
+
+  /** The same live transcript file, watched: the CLI or another device appends to it. */
+  async watchNativeHistory(
+    input: ProviderHistoryInput,
+    vaultPath: string | null,
+    onChange: () => void,
+    pathContext?: ClaudeConfigDirContext,
+  ): Promise<(() => void) | null> {
+    const sessionPath = await this.#liveSessionPath(input, vaultPath, pathContext);
+    return sessionPath ? watchFileChanges(sessionPath, onChange) : null;
+  }
+
+  async #liveSessionPath(
+    input: ProviderHistoryInput,
+    vaultPath: string | null,
+    pathContext?: ClaudeConfigDirContext,
+  ): Promise<string | null> {
     if (!vaultPath || this.isPendingForkConversation(input)) return null;
     const sessionId = getClaudeState(input.providerState).providerSessionId ?? input.sessionId;
     if (!sessionId) return null;
     try {
       const context = await resolveClaudeHistoryContext(pathContext, vaultPath);
-      const { sessionPath } = await locateSDKSession(vaultPath, sessionId, context);
-      return sessionPath ? await readFileRevision(sessionPath) : null;
+      return (await locateSDKSession(vaultPath, sessionId, context)).sessionPath ?? null;
     } catch {
       return null;
     }

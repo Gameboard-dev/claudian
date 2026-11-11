@@ -307,3 +307,38 @@ it('revises native history only for appends to the live session transcript', asy
     await fs.rm(configDir, { recursive: true, force: true });
   }
 });
+
+it('watches the live session transcript for appends, and nothing once stopped', async () => {
+  const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'claudian-native-watch-'));
+  const vaultPath = path.join(configDir, 'vault');
+  const pathContext = { environment: { CLAUDE_CONFIG_DIR: configDir }, vaultPath };
+  const sessionDir = path.join(historyStore.getSDKProjectsPath(pathContext), historyStore.encodeVaultPathForSDK(vaultPath));
+  const line = (uuid: string) => JSON.stringify({ type: 'user', uuid, timestamp: testTime(), message: { content: uuid } });
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(path.join(sessionDir, 'live.jsonl'), line('l1'));
+  const service = new ClaudeConversationHistoryService();
+  const conversation = createConversation({ sessionId: 'live', providerState: { providerSessionId: 'live' } });
+  let changes = 0;
+
+  try {
+    const stop = await service.watchNativeHistory(conversation, vaultPath, () => { changes++; }, pathContext);
+    expect(stop).toBeTypeOf('function');
+    // `claude --resume live` on another device or in a terminal appends to the same transcript.
+    await fs.appendFile(path.join(sessionDir, 'live.jsonl'), '\n' + line('l2'));
+    await vi.waitFor(() => expect(changes).toBeGreaterThan(0));
+    stop?.();
+    const after = changes;
+    await fs.appendFile(path.join(sessionDir, 'live.jsonl'), '\n' + line('l3'));
+    await new Promise<void>(resolve => setTimeout(resolve, 200));
+    expect(changes).toBe(after);
+
+    await expect(service.watchNativeHistory(createConversation({ sessionId: 'missing' }), vaultPath, () => undefined, pathContext))
+      .resolves.toBeNull();
+    await expect(service.watchNativeHistory(createConversation({
+      sessionId: null,
+      providerState: { forkSource: { sessionId: 'live', resumeAt: 'l1' } },
+    }), vaultPath, () => undefined, pathContext)).resolves.toBeNull();
+  } finally {
+    await fs.rm(configDir, { recursive: true, force: true });
+  }
+});

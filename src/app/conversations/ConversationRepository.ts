@@ -876,19 +876,45 @@ export class ConversationRepository {
     const vaultPath = this.deps.getVaultPath();
     try {
       return await this.deps.providers.getConversationHistoryService(conversation.providerId).readNativeHistoryRevision(
-        {
-          sessionId: conversation.sessionId,
-          providerState: conversation.providerState,
-          resumeAtMessageId: conversation.resumeAtMessageId,
-          // Revisions describe the native store; cached messages play no part.
-          messages: [],
-        },
+        this.#nativeHistoryInput(conversation),
         vaultPath,
         this.#getHistoryPathContext(conversation.providerId, vaultPath),
       );
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Watches the native history that `readNativeHistoryRevision` reads, so a shown conversation follows changes
+   * made outside Claudian. The watch's stop; null when the record is gone or the provider cannot watch.
+   */
+  async watchNativeHistory(id: string, onChange: () => void): Promise<(() => void) | null> {
+    const conversation = this.#getRecord(id);
+    if (!conversation) return null;
+    const service = this.deps.providers.getConversationHistoryService(conversation.providerId);
+    if (!service.watchNativeHistory) return null;
+    const vaultPath = this.deps.getVaultPath();
+    try {
+      return await service.watchNativeHistory(
+        this.#nativeHistoryInput(conversation),
+        vaultPath,
+        onChange,
+        this.#getHistoryPathContext(conversation.providerId, vaultPath),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  #nativeHistoryInput(conversation: Conversation): ProviderHistoryInput {
+    return {
+      sessionId: conversation.sessionId,
+      providerState: conversation.providerState,
+      resumeAtMessageId: conversation.resumeAtMessageId,
+      // Revisions describe the native store; cached messages play no part.
+      messages: [],
+    };
   }
 
   /** Releases only the hydrated projection, after admitted writes and history reads settle. */

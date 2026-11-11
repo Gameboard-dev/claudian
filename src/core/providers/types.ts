@@ -515,6 +515,17 @@ export interface ProviderConversationHistoryService {
     vaultPath: string | null,
     pathContext?: ProviderHistoryPathContext,
   ): Promise<string | null>;
+  /**
+   * Watches the same live native history, calling `onChange` whenever its revision may have changed, so a
+   * shown conversation follows writes made elsewhere. Resolves to the watch's stop, or null when it cannot be
+   * watched cheaply; the same limits as `readNativeHistoryRevision` apply, and no polling.
+   */
+  watchNativeHistory?(
+    conversation: ProviderHistoryInput,
+    vaultPath: string | null,
+    onChange: () => void,
+    pathContext?: ProviderHistoryPathContext,
+  ): Promise<(() => void) | null>;
   resolveSessionIdForConversation(conversation: ProviderHistoryInput | null): string | null;
   isPendingForkConversation(conversation: ProviderHistoryInput): boolean;
   /** Builds opaque fork state; ephemeral creation may be deferred to its execution owner. */
